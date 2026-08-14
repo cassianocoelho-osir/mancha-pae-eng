@@ -1,11 +1,13 @@
 import streamlit as st
 import pandas as pd
 import folium
-from folium.plugins import HeatMap
 from streamlit_folium import st_folium
+import shapely.geometry as sg
+from shapely.ops import unary_union
+import json
 
-st.set_page_config(layout="wide", page_title="Mapa de Mancha - Controle HP")
-st.title("Mapa de Mancha - Controle HP")
+st.set_page_config(layout="wide", page_title="Mapa de Mancha Unicor - Controle HP")
+st.title("Mapa de Mancha de Atendimento PAE")
 
 # Exporta a aba Controle HP (gid=1265583443) em CSV
 URL_CSV = "https://docs.google.com/spreadsheets/d/1vmccPxvC4Z0rrfSyhF6HhehGSqpjY5oJboR-hG8O4bg/export?format=csv&gid=1265583443"
@@ -33,9 +35,7 @@ def carregar_dados():
     df_util['lat'] = [c[0] for c in coords]
     df_util['lon'] = [c[1] for c in coords]
     
-    # Remove qualquer registro inválido
     df_util = df_util.dropna(subset=['lat', 'lon'])
-    
     return df_util
 
 try:
@@ -55,27 +55,37 @@ if not df_mapa.empty:
         control_scale=True
     )
     
-    # 1. Adiciona a mancha de calor (HeatMap)
-    dados_calor = df_mapa[['lat', 'lon']].values.tolist()
-    HeatMap(
-        dados_calor,
-        radius=25,
-        blur=15,
-        min_opacity=0.4
-    ).add_to(m)
-    
-    # 2. Adiciona os buffers sem as bordas vermelhas (stroke=False)
+    # --- CONSTRUÇÃO DO POLÍGONO UNIFICADO (SBA / UNARY UNION) ---
+    # Conversão de 60 metros para graus aproximados em latitude/longitude
+    RAIO_METROS = 60
+    GRAUS_POR_METRO = 1 / 111139.0
+    raio_graus = RAIO_METROS * GRAUS_POR_METRO
+
+    poligonos = []
     for _, linha in df_mapa.iterrows():
-        folium.Circle(
-            location=[linha['lat'], linha['lon']],
-            radius=75,
-            stroke=False,        # 👈 REMOVE AS BORDAS VERMELHAS
-            fill=True,
-            fill_color='red',
-            fill_opacity=0.08   # Opacidade suave para não sobrepor muito
-        ).add_to(m)
+        ponto = sg.Point(linha['lon'], linha['lat'])
+        # Cria o buffer circular de 60 metros
+        circulo = ponto.buffer(raio_graus)
+        poligonos.append(circulo)
+
+    # Une todos os círculos em uma única geometria sem sobreposições internas
+    mancha_unificada = unary_union(poligonos)
+
+    # Estilo verde unicor
+    estilo_verde = {
+        'fillColor': '#00FF00',  # Verde limão/vivo (ajuste para '#2ECC71' se preferir mais suave)
+        'color': '#00FF00',
+        'weight': 0,             # Sem bordas para manter a área 100% limpa
+        'fillOpacity': 0.45      # Opacidade fixa (não escurece nas sobreposições)
+    }
+
+    # Adiciona a mancha verde unificada ao mapa
+    folium.GeoJson(
+        json.loads(json.dumps(sg.mapping(mancha_unificada))),
+        style_function=lambda x: estilo_verde
+    ).add_to(m)
             
-    st.write(f"🟢 **{len(df_mapa)}** registros válidos encontrados e plotados.")
-    st_folium(m, width=1300, height=700, returned_objects=[], key="mapa_mancha_sem_bordas")
+    st.write(f"🟢 **{len(df_mapa)}** registros plotados com **Buffer unificado de 60 metros (Unicor Verde)**.")
+    st_folium(m, width=1300, height=700, returned_objects=[], key="mapa_mancha_unicor_verde")
 else:
     st.warning("Nenhum dado válido encontrado para plotar.")
