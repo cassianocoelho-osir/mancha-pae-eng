@@ -22,7 +22,7 @@ def carregar_dados():
     df_util['coordenada'] = df[2].fillna("").astype(str).str.strip()
     
     # Lê a Coluna D (HP) e converte para valor numérico
-    df_util['hp'] = pd.to_numeric(df[3], errors='coerce').fillna(0).astype(int)
+    df_util['hp'] = pd.to_numeric(df[5], errors='coerce').fillna(0).astype(int)
     
     # 1. Filtra apenas linhas onde a Coluna A NÃO está vazia e desconsidera o cabeçalho
     df_util = df_util[(df_util['coluna_a'] != "") & (df_util['coluna_a'] != "CEO/SPL REF.")]
@@ -77,7 +77,7 @@ if not df_mapa.empty:
         'fillColor': '#00FF00',
         'color': '#00FF00',
         'weight': 0,
-        'fillOpacity': 0.35
+        'fillOpacity': 0.25
     }
 
     folium.GeoJson(
