@@ -8,7 +8,7 @@ from shapely.ops import unary_union
 import json
 
 st.set_page_config(layout="wide", page_title="Mapa de Mancha Unicor - Controle HP")
-st.title("🟢 Mapa de Mancha de Atendimento PAE")
+st.title("🟢 Mapa de Mancha de Atendimento PAE (Soma de Entregue)")
 
 # Exporta a aba Controle HP (gid=1265583443) em CSV
 URL_CSV = "https://docs.google.com/spreadsheets/d/1vmccPxvC4Z0rrfSyhF6HhehGSqpjY5oJboR-hG8O4bg/export?format=csv&gid=1265583443"
@@ -21,8 +21,11 @@ def carregar_dados():
     df_util['coluna_a'] = df[0].fillna("").astype(str).str.strip()
     df_util['coordenada'] = df[2].fillna("").astype(str).str.strip()
     
-    # Lê a Coluna D (HP) e converte para valor numérico
-    df_util['hp'] = pd.to_numeric(df[5], errors='coerce').fillna(0).astype(int)
+    # Coluna F (índice 5) é o valor ENTREGUE
+    df_util['entregue'] = pd.to_numeric(
+        df[5].astype(str).str.replace(r'[^\d]', '', regex=True), 
+        errors='coerce'
+    ).fillna(0).astype(int)
     
     # 1. Filtra apenas linhas onde a Coluna A NÃO está vazia e desconsidera o cabeçalho
     df_util = df_util[(df_util['coluna_a'] != "") & (df_util['coluna_a'] != "CEO/SPL REF.")]
@@ -52,7 +55,7 @@ except Exception as e:
 if not df_mapa.empty:
     centro_lat = df_mapa['lat'].mean()
     centro_lon = df_mapa['lon'].mean()
-    total_hp = df_mapa['hp'].sum()
+    total_entregue = df_mapa['entregue'].sum()
     
     m = folium.Map(
         location=[centro_lat, centro_lon], 
@@ -85,49 +88,52 @@ if not df_mapa.empty:
         style_function=lambda x: estilo_verde
     ).add_to(m)
 
-    # --- 2. AGRUPAMENTO E SOMA DE HP (MARKER CLUSTER) ---
-    marker_cluster = MarkerCluster(
-        name="Clusters de HP",
-        overlay=True,
-        control=True,
-        icon_create_function="""
-        function(cluster) {
-            var markers = cluster.getAllChildMarkers();
-            var sumHP = 0;
-            for (var i = 0; i < markers.length; i++) {
-                sumHP += parseInt(markers[i].options.hp_val || 0);
-            }
-            return L.divIcon({
-                html: '<div style="background-color: rgba(0, 100, 0, 0.85); color: white; border-radius: 50%; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.4);">' + sumHP + '</div>',
-                className: 'marker-cluster-hp',
-                iconSize: L.point(42, 42)
-            });
+    # --- 2. SOMA DE ENTREGUE VIA MARKER CLUSTER (JAVASCRIPT) ---
+    icon_create_function = """
+    function(cluster) {
+        var markers = cluster.getAllChildMarkers();
+        var sumEntregue = 0;
+        for (var i = 0; i < markers.length; i++) {
+            var val = parseInt(markers[i].options.alt) || 0;
+            sumEntregue += val;
         }
-        """
+        return L.divIcon({
+            html: '<div style="background-color: #006400; color: white; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; border: 2px solid #ffffff; box-shadow: 0 2px 6px rgba(0,0,0,0.5);">' + sumEntregue + '</div>',
+            className: 'marker-cluster-entregue',
+            iconSize: L.point(44, 44)
+        });
+    }
+    """
+
+    marker_cluster = MarkerCluster(
+        name="Clusters Entregue",
+        icon_create_function=icon_create_function
     ).add_to(m)
 
-    # Adiciona os pontos individuais no agrupador
+    # Adiciona marcadores individuais no cluster
     for _, linha in df_mapa.iterrows():
-        val_hp = int(linha['hp'])
-        folium.CircleMarker(
+        val_entregue = int(linha['entregue'])
+        
+        icon_html = f"""
+        <div style="background-color: #008000; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 11px; border: 1.5px solid white;">
+            {val_entregue}
+        </div>
+        """
+        
+        folium.Marker(
             location=[linha['lat'], linha['lon']],
-            radius=5,
-            color="#006400",
-            fill=True,
-            fill_color="#00FF00",
-            fill_opacity=0.9,
-            popup=f"<b>Ref:</b> {linha['coluna_a']}<br><b>HP:</b> {val_hp}",
-            tooltip=f"{linha['coluna_a']} — {val_hp} HP",
-            hp_val=val_hp
+            icon=folium.DivIcon(html=icon_html, icon_size=(28, 28)),
+            alt=str(val_entregue),  # Armazena o valor do 'Entregue' para o JavaScript somar
+            popup=f"<b>Ref:</b> {linha['coluna_a']}<br><b>Entregue:</b> {val_entregue}",
+            tooltip=f"{linha['coluna_a']} — {val_entregue} Entregues"
         ).add_to(marker_cluster)
 
     # --- EXIBIÇÃO DE MÉTRICAS ---
     col1, col2 = st.columns(2)
     col1.metric("Total de Registros Plotados", len(df_mapa))
-    col2.metric("Soma Total de HP", f"{total_hp:,}".replace(",", "."))
+    col2.metric("Soma Total Entregue", f"{total_entregue:,}".replace(",", "."))
 
-    # Renderiza o mapa com captura de estado interativo
-    st_data = st_folium(m, width=1300, height=700, key="mapa_hp_zoom")
+    st_folium(m, width=1300, height=700, returned_objects=[], key="mapa_entregue_soma")
 
 else:
     st.warning("Nenhum dado válido encontrado para plotar.")
