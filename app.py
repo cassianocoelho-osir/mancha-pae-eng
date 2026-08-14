@@ -57,7 +57,7 @@ if not df_mapa.empty:
     
     # --- CONSTRUÇÃO DO POLÍGONO UNIFICADO (SBA / UNARY UNION) ---
     # Conversão de 60 metros para graus aproximados em latitude/longitude
-    RAIO_METROS = 10
+    RAIO_METROS = 60
     GRAUS_POR_METRO = 1 / 111139.0
     raio_graus = RAIO_METROS * GRAUS_POR_METRO
 
