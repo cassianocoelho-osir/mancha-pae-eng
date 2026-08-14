@@ -5,7 +5,7 @@ from folium.plugins import HeatMap
 from streamlit_folium import st_folium
 
 st.set_page_config(layout="wide", page_title="Mapa de Mancha - Controle HP")
-st.title("Entrega Hp Mancha")
+st.title("Mapa de Mancha - Controle HP")
 
 # Exporta a aba Controle HP (gid=1265583443) em CSV
 URL_CSV = "https://docs.google.com/spreadsheets/d/1vmccPxvC4Z0rrfSyhF6HhehGSqpjY5oJboR-hG8O4bg/export?format=csv&gid=1265583443"
@@ -55,7 +55,7 @@ if not df_mapa.empty:
         control_scale=True
     )
     
-    # Adiciona a camada de mancha de calor (HeatMap)
+    # 1. Adiciona a mancha de calor (HeatMap)
     dados_calor = df_mapa[['lat', 'lon']].values.tolist()
     HeatMap(
         dados_calor,
@@ -64,18 +64,18 @@ if not df_mapa.empty:
         min_opacity=0.4
     ).add_to(m)
     
-    # Adiciona o buffer real de 75 metros para cada ponto
+    # 2. Adiciona os buffers sem as bordas vermelhas (stroke=False)
     for _, linha in df_mapa.iterrows():
         folium.Circle(
             location=[linha['lat'], linha['lon']],
             radius=75,
-            color='red',
-            weight=1,
+            stroke=False,        # 👈 REMOVE AS BORDAS VERMELHAS
             fill=True,
-            fill_opacity=0.1
+            fill_color='red',
+            fill_opacity=0.08   # Opacidade suave para não sobrepor muito
         ).add_to(m)
             
     st.write(f"🟢 **{len(df_mapa)}** registros válidos encontrados e plotados.")
-    st_folium(m, width=1300, height=700, returned_objects=[], key="mapa_mancha_final")
+    st_folium(m, width=1300, height=700, returned_objects=[], key="mapa_mancha_sem_bordas")
 else:
     st.warning("Nenhum dado válido encontrado para plotar.")
